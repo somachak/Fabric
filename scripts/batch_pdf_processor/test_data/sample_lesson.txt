@@ -1,0 +1,64 @@
+# Introduction to Linear Regression
+
+## Overview
+
+Linear regression is a fundamental statistical method used to model the relationship between a dependent variable and one or more independent variables. It assumes a linear relationship between the variables.
+
+## Key Concepts
+
+### Simple Linear Regression
+
+The model can be expressed as:
+y = β₀ + β₁x + ε
+
+Where:
+- y is the dependent variable
+- x is the independent variable
+- β₀ is the y-intercept
+- β₁ is the slope
+- ε is the error term
+
+### Learning Objectives
+
+By the end of this lesson, students should be able to:
+
+1. Understand the concept of linear relationships
+2. Interpret regression coefficients
+3. Calculate and interpret R-squared values
+4. Apply linear regression using Python
+
+## Python Implementation
+
+Here's a simple example using scikit-learn:
+
+```python
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+# Sample data
+X = np.array([[1], [2], [3], [4], [5]])
+y = np.array([2, 4, 5, 4, 5])
+
+# Create and fit model
+model = LinearRegression()
+model.fit(X, y)
+
+# Make predictions
+predictions = model.predict(X)
+```
+
+## Practice Exercises
+
+1. Given a dataset of house sizes and prices, build a linear regression model
+2. Calculate the R-squared value for your model
+3. Interpret the coefficients in context
+
+## Common Pitfalls
+
+- Assuming linearity when the relationship is non-linear
+- Ignoring outliers that can heavily influence the model
+- Not checking assumptions (normality of residuals, homoscedasticity)
+
+## Summary
+
+Linear regression is a powerful tool for understanding relationships between variables. It forms the foundation for more advanced statistical and machine learning techniques.
