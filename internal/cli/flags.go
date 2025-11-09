@@ -512,14 +512,43 @@ func (o *Flags) BuildChatRequest(Meta string) (ret *domain.ChatRequest, err erro
 			if attachment, err = domain.NewAttachment(attachmentValue); err != nil {
 				return
 			}
+
+			// Get the mime type to check if it's a PDF
+			var mimeType string
+			if mimeType, err = attachment.ResolveType(); err != nil {
+				return
+			}
+
+			// Handle PDFs specially - extract text content
+			if domain.IsPDF(mimeType) {
+				var pdfData []byte
+				if pdfData, err = attachment.ContentBytes(); err != nil {
+					return
+				}
+
+				// Extract text from PDF
+				var extractedText string
+				if extractedText, err = domain.ExtractTextFromPDF(pdfData); err != nil {
+					// If text extraction fails, log warning but continue
+					fmt.Fprintf(os.Stderr, "Warning: Failed to extract text from PDF %s: %v\n", attachmentValue, err)
+					fmt.Fprintf(os.Stderr, "Sending PDF as image instead...\n")
+				} else {
+					// Successfully extracted text - add it as a text part
+					pdfTextHeader := fmt.Sprintf("\n\n--- PDF Content from %s ---\n\n", attachmentValue)
+					message.MultiContent = append(message.MultiContent, chat.ChatMessagePart{
+						Type: chat.ChatMessagePartTypeText,
+						Text: pdfTextHeader + extractedText,
+					})
+					// Continue to next attachment - we've processed this PDF
+					continue
+				}
+			}
+
+			// For non-PDF files or if PDF text extraction failed, treat as image
 			url := attachment.URL
 			if url == nil {
 				var base64Image string
 				if base64Image, err = attachment.Base64Content(); err != nil {
-					return
-				}
-				var mimeType string
-				if mimeType, err = attachment.ResolveType(); err != nil {
 					return
 				}
 				dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
