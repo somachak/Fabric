@@ -1,0 +1,16 @@
+# Batch PDF Processor Requirements
+# Install with: pip install -r requirements.txt
+
+# Gemini AI for vision and text intelligence
+google-generativeai>=0.8.0
+
+# Required for async operations (usually included with Python)
+# concurrent.futures (built-in)
+
+# GUI support (usually included with Python)
+# tkinter (built-in on most systems)
+
+# Optional: Vector database support (for future integration)
+# chromadb>=0.4.0
+# langchain>=0.1.0
+# sentence-transformers>=2.0.0
