@@ -237,14 +237,17 @@ with st.sidebar:
     )
 
     if st.button("🔄 Load Knowledge Base"):
-        expanded_path = os.path.expanduser(knowledge_path)
-        if os.path.exists(expanded_path):
-            knowledge = load_statistics_knowledge(expanded_path)
-            st.session_state.knowledge_files = knowledge
-            st.session_state.knowledge_base_path = expanded_path
-            st.success(f"✅ Loaded {len(knowledge)} knowledge files")
+        if knowledge_path:
+            expanded_path = os.path.expanduser(knowledge_path)
+            if os.path.exists(expanded_path):
+                knowledge = load_statistics_knowledge(expanded_path)
+                st.session_state.knowledge_files = knowledge
+                st.session_state.knowledge_base_path = expanded_path
+                st.success(f"✅ Loaded {len(knowledge)} knowledge files")
+            else:
+                st.error(f"❌ Path not found: {expanded_path}")
         else:
-            st.error(f"❌ Path not found: {expanded_path}")
+            st.error("❌ Please enter a path to your knowledge base")
 
     st.markdown("---")
     st.subheader("📊 Analysis Options")
