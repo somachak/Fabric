@@ -16,6 +16,7 @@ from subprocess import run, CalledProcessError
 import os
 import json
 import logging
+import shutil
 from pathlib import Path
 from datetime import datetime
 import re
@@ -99,6 +100,29 @@ def load_statistics_knowledge(knowledge_path):
                 logger.error(f"Error loading {file}: {e}")
 
     return knowledge_files
+
+def find_fabric_executable():
+    """Find the fabric executable in PATH or use local binary"""
+    # First, try to find fabric in PATH
+    fabric_path = shutil.which('fabric')
+
+    if fabric_path:
+        return fabric_path
+
+    # If not in PATH, try the local repository fabric binary
+    # Assuming the app is in scripts/statistical_hr_analytics/
+    script_dir = Path(__file__).parent
+    local_fabric = script_dir / '..' / '..' / 'fabric'
+
+    if local_fabric.exists() and os.access(local_fabric, os.X_OK):
+        return str(local_fabric.resolve())
+
+    # Last resort: check if user has set FABRIC_PATH environment variable
+    env_fabric = os.environ.get('FABRIC_PATH')
+    if env_fabric and Path(env_fabric).exists():
+        return env_fabric
+
+    return None
 
 def render_visual_output(output: str) -> None:
     """Render output with Mermaid diagram support"""
@@ -359,8 +383,15 @@ with tab1:
         else:
             with st.spinner("🔬 Applying statistical methods..."):
                 try:
+                    # Find fabric executable
+                    fabric_cmd = find_fabric_executable()
+
+                    if not fabric_cmd:
+                        st.error("❌ Fabric executable not found. Please install Fabric or set FABRIC_PATH environment variable.")
+                        st.stop()
+
                     # Run the statistical analysis pattern
-                    cmd = ["fabric", "--pattern", "apply_statistics_to_hr_compensation"]
+                    cmd = [fabric_cmd, "--pattern", "apply_statistics_to_hr_compensation"]
 
                     result = run(
                         cmd,
