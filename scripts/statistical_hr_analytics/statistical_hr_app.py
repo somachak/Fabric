@@ -85,21 +85,44 @@ if 'column_mapping' not in st.session_state:
     st.session_state.column_mapping = {}
 
 def load_statistics_knowledge(knowledge_path):
-    """Load extracted statistics knowledge from processed PDFs"""
+    """Load knowledge from multiple file formats: .md, .txt, .json"""
     knowledge_files = []
 
     if knowledge_path and os.path.exists(knowledge_path):
-        for file in Path(knowledge_path).rglob("*_teaching.md"):
-            try:
-                with open(file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    knowledge_files.append({
-                        'filename': file.name,
-                        'path': str(file),
-                        'content': content
-                    })
-            except Exception as e:
-                logger.error(f"Error loading {file}: {e}")
+        # Supported file patterns and types
+        file_patterns = [
+            ("*.md", "Markdown"),
+            ("*.txt", "Text"),
+            ("*.json", "JSON")
+        ]
+
+        for pattern, file_type in file_patterns:
+            for file in Path(knowledge_path).rglob(pattern):
+                try:
+                    with open(file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                        # For JSON files, try to pretty-format
+                        if file_type == "JSON":
+                            try:
+                                json_data = json.loads(content)
+                                content = json.dumps(json_data, indent=2)
+                            except json.JSONDecodeError:
+                                # If invalid JSON, keep as plain text
+                                pass
+
+                        knowledge_files.append({
+                            'filename': file.name,
+                            'path': str(file),
+                            'content': content,
+                            'type': file_type,
+                            'size': len(content)
+                        })
+                except Exception as e:
+                    logger.error(f"Error loading {file}: {e}")
+
+    # Sort by filename for consistent ordering
+    knowledge_files.sort(key=lambda x: x['filename'])
 
     return knowledge_files
 
@@ -286,10 +309,11 @@ with st.sidebar:
 
     st.subheader("📚 Statistics Knowledge Base")
     knowledge_path = st.text_input(
-        "Path to processed PDFs",
+        "Path to knowledge files",
         value=st.session_state.get('knowledge_base_path', '~/statistics_knowledge_base'),
-        help="Path where your processed statistics PDFs are stored"
+        help="Path containing .md, .txt, or .json files with statistical knowledge"
     )
+    st.caption("💡 Supports: Markdown (.md), Text (.txt), JSON (.json)")
 
     if st.button("🔄 Load Knowledge Base"):
         if knowledge_path:
@@ -525,14 +549,41 @@ with tab2:
     st.header("📚 Statistics Knowledge Base")
 
     if 'knowledge_files' in st.session_state and st.session_state.knowledge_files:
-        st.success(f"✅ {len(st.session_state.knowledge_files)} knowledge files loaded")
+        # Count files by type
+        file_types = {}
+        for kf in st.session_state.knowledge_files:
+            file_type = kf.get('type', 'Unknown')
+            file_types[file_type] = file_types.get(file_type, 0) + 1
+
+        # Display summary
+        type_summary = ", ".join([f"{count} {ftype}" for ftype, count in sorted(file_types.items())])
+        st.success(f"✅ {len(st.session_state.knowledge_files)} knowledge files loaded ({type_summary})")
 
         st.subheader("Available Knowledge Sources:")
 
-        for idx, kf in enumerate(st.session_state.knowledge_files):
-            with st.expander(f"📖 {kf['filename']}", expanded=False):
-                st.markdown(kf['content'][:1000] + "..." if len(kf['content']) > 1000 else kf['content'])
-                st.caption(f"Full path: {kf['path']}")
+        # Group by file type
+        for file_type in sorted(file_types.keys()):
+            st.markdown(f"### {file_type} Files ({file_types[file_type]})")
+
+            type_files = [kf for kf in st.session_state.knowledge_files if kf.get('type') == file_type]
+
+            for kf in type_files:
+                # Icon based on file type
+                icon = {"Markdown": "📝", "Text": "📄", "JSON": "🔧"}.get(file_type, "📖")
+                size_kb = kf.get('size', 0) / 1024
+
+                with st.expander(f"{icon} {kf['filename']} ({size_kb:.1f} KB)", expanded=False):
+                    # Show preview
+                    preview_length = 2000 if file_type == "JSON" else 1000
+                    content = kf['content']
+                    if len(content) > preview_length:
+                        st.markdown(content[:preview_length] + "\n\n**... (truncated)**")
+                    else:
+                        st.markdown(content)
+
+                    # Show metadata
+                    st.caption(f"**Type:** {file_type} | **Size:** {size_kb:.2f} KB")
+                    st.caption(f"**Path:** {kf['path']}")
     else:
         st.info("📂 Load your statistics knowledge base using the sidebar configuration")
 
