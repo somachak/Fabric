@@ -81,6 +81,8 @@ if 'current_data' not in st.session_state:
     st.session_state.current_data = None
 if 'knowledge_base_path' not in st.session_state:
     st.session_state.knowledge_base_path = None
+if 'column_mapping' not in st.session_state:
+    st.session_state.column_mapping = {}
 
 def load_statistics_knowledge(knowledge_path):
     """Load extracted statistics knowledge from processed PDFs"""
@@ -148,7 +150,7 @@ def render_visual_output(output: str) -> None:
     else:
         st.markdown(output)
 
-def extract_and_run_code(output: str, data_context=None):
+def extract_and_run_code(output: str, data_context=None, auto_execute=False, column_mapping=None):
     """Extract Python code from output and optionally run it"""
     code_pattern = r'```python\s*(.*?)```'
     code_blocks = re.findall(code_pattern, output, re.DOTALL)
@@ -157,37 +159,66 @@ def extract_and_run_code(output: str, data_context=None):
         st.subheader("📝 Generated Analysis Code")
 
         for idx, code in enumerate(code_blocks, 1):
-            with st.expander(f"Code Block {idx}", expanded=(idx == 1)):
+            # Apply column mapping if provided
+            if column_mapping:
+                for standard_name, actual_name in column_mapping.items():
+                    # Replace column references in code
+                    code = code.replace(f"'{standard_name}'", f"'{actual_name}'")
+                    code = code.replace(f'"{standard_name}"', f'"{actual_name}"')
+                    code = code.replace(f"['{standard_name}']", f"['{actual_name}']")
+                    code = code.replace(f'["{standard_name}"]', f'["{actual_name}"]')
+
+            with st.expander(f"Code Block {idx}", expanded=True):
                 st.code(code, language='python')
 
-                if st.button(f"▶️ Run Code Block {idx}", key=f"run_{idx}"):
-                    try:
-                        # Create execution context with sample data
-                        exec_globals = {
-                            'pd': pd,
-                            'np': np,
-                            'plt': plt,
-                            'sns': sns,
-                            'stats': stats,
-                            'sm': sm,
-                            'st': st
-                        }
+                # Auto-execute or manual execute
+                should_execute = auto_execute or st.button(f"▶️ Run Code Block {idx}", key=f"run_{idx}")
 
-                        if data_context is not None:
-                            exec_globals['df'] = data_context
+                if should_execute:
+                    with st.spinner(f"Executing code block {idx}..."):
+                        try:
+                            # Create execution context with sample data
+                            exec_globals = {
+                                'pd': pd,
+                                'np': np,
+                                'plt': plt,
+                                'sns': sns,
+                                'stats': stats,
+                                'sm': sm,
+                                'st': st
+                            }
 
-                        # Execute code
-                        exec(code, exec_globals)
+                            if data_context is not None:
+                                exec_globals['df'] = data_context
 
-                        # Show any generated plots
-                        if plt.get_fignums():
-                            st.pyplot(plt.gcf())
-                            plt.clf()
+                            # Capture stdout for print statements
+                            from io import StringIO
+                            import sys
+                            old_stdout = sys.stdout
+                            sys.stdout = captured_output = StringIO()
 
-                        st.success("✅ Code executed successfully!")
+                            # Execute code
+                            exec(code, exec_globals)
 
-                    except Exception as e:
-                        st.error(f"❌ Execution error: {str(e)}")
+                            # Restore stdout
+                            sys.stdout = old_stdout
+                            output_text = captured_output.getvalue()
+
+                            # Show captured output
+                            if output_text:
+                                st.text(output_text)
+
+                            # Show any generated plots
+                            if plt.get_fignums():
+                                st.pyplot(plt.gcf())
+                                plt.clf()
+
+                            st.success("✅ Code executed successfully!")
+
+                        except Exception as e:
+                            st.error(f"❌ Execution error: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
 
 def generate_sample_data(scenario_type):
     """Generate realistic sample HR compensation data"""
@@ -374,6 +405,61 @@ with tab1:
             with st.expander("👁️ Preview Data"):
                 st.dataframe(st.session_state.current_data.head())
 
+    # Column Mapping
+    if st.session_state.current_data is not None:
+        st.subheader("🔄 Column Mapping (Optional)")
+        st.info("📋 Map your actual column names to standard variables. This makes the generated code work with YOUR data!")
+
+        with st.expander("⚙️ Configure Column Mapping", expanded=False):
+            st.markdown("**Your Columns:** " + ", ".join(st.session_state.current_data.columns.tolist()))
+
+            standard_columns = {
+                "salary": "Employee salary/compensation",
+                "years_experience": "Years of work experience",
+                "education": "Education level",
+                "department": "Department/division",
+                "performance_rating": "Performance score",
+                "gender": "Gender",
+                "age": "Age",
+                "job_level": "Job level/grade",
+                "race": "Race/ethnicity",
+                "promoted": "Promotion status (0/1)",
+                "left": "Attrition status (0/1)",
+                "tenure_months": "Tenure in months"
+            }
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**Standard Variable**")
+            with col2:
+                st.markdown("**Your Column Name**")
+
+            mapping = {}
+            for std_col, description in standard_columns.items():
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**{std_col}**")
+                    st.caption(description)
+                with col2:
+                    user_col = st.selectbox(
+                        "Select column",
+                        ["<not mapped>"] + st.session_state.current_data.columns.tolist(),
+                        key=f"map_{std_col}",
+                        label_visibility="collapsed"
+                    )
+                    if user_col != "<not mapped>":
+                        mapping[std_col] = user_col
+
+            if st.button("💾 Save Column Mapping"):
+                st.session_state.column_mapping = mapping
+                st.success(f"✅ Saved {len(mapping)} column mappings!")
+                st.json(mapping)
+
+            if st.session_state.column_mapping:
+                st.markdown("**Current Mappings:**")
+                st.json(st.session_state.column_mapping)
+
     # Run analysis
     st.markdown("---")
 
@@ -412,7 +498,12 @@ with tab1:
 
                         # Extract and show code
                         if show_code:
-                            extract_and_run_code(output, st.session_state.current_data)
+                            extract_and_run_code(
+                                output,
+                                st.session_state.current_data,
+                                auto_execute=execute_code,
+                                column_mapping=st.session_state.column_mapping
+                            )
 
                         # Save to history
                         st.session_state.analysis_history.append({
