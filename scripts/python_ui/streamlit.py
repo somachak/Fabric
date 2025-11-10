@@ -15,6 +15,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+# Try to import streamlit-mermaid for diagram rendering
+try:
+    from streamlit_mermaid import st_mermaid
+    MERMAID_AVAILABLE = True
+except ImportError:
+    MERMAID_AVAILABLE = False
+    logger.warning("streamlit-mermaid not available. Mermaid diagrams will be displayed as code.")
+
 # Create formatters
 console_formatter = logging.Formatter(
     "\033[92m%(asctime)s\033[0m - "  # Green timestamp
@@ -1249,6 +1257,43 @@ def enhance_input_preview():
                 st.metric("Words", word_count)
 
 
+def render_visual_output(output: str) -> None:
+    """Render output with support for Mermaid diagrams and enhanced visuals.
+
+    Args:
+        output: The output text that may contain Mermaid diagrams
+    """
+    # Check if output contains Mermaid diagrams
+    mermaid_pattern = r'```mermaid\s*(.*?)```'
+    mermaid_matches = re.findall(mermaid_pattern, output, re.DOTALL)
+
+    if mermaid_matches:
+        # Split output into sections with and without Mermaid
+        parts = re.split(mermaid_pattern, output, flags=re.DOTALL)
+
+        for i, part in enumerate(parts):
+            if i % 2 == 0:  # Regular markdown content
+                if part.strip():
+                    st.markdown(part)
+            else:  # Mermaid diagram
+                st.markdown("### 📊 Visual Diagram")
+                if MERMAID_AVAILABLE:
+                    try:
+                        st_mermaid(part.strip())
+                    except Exception as e:
+                        logger.error(f"Error rendering Mermaid: {str(e)}")
+                        st.code(part.strip(), language="mermaid")
+                        st.info("💡 Mermaid diagram code (install streamlit-mermaid for interactive rendering)")
+                else:
+                    # Fallback: display as code block
+                    with st.expander("📊 Mermaid Diagram Code (Click to expand)", expanded=True):
+                        st.code(part.strip(), language="mermaid")
+                        st.info("💡 Install `streamlit-mermaid` to see interactive diagrams: `pip install streamlit-mermaid`")
+    else:
+        # No Mermaid diagrams, render as regular markdown
+        st.markdown(output)
+
+
 def get_clipboard_content() -> Tuple[bool, str, str]:
     """Get content from clipboard with proper error handling.
 
@@ -1504,7 +1549,7 @@ def main():
             st.title("Navigation")
             view = st.radio(
                 "Select View",
-                ["Run Patterns", "Pattern Management", "Analysis Dashboard"],
+                ["Run Patterns", "Pattern Management", "Analysis Dashboard", "💰 HR Compensation Demo"],
                 key="view_selector",
             )
             logger.debug(f"Selected view: {view}")
@@ -1690,7 +1735,7 @@ def main():
                         st.markdown("---")
                         st.header("Pattern Outputs")
                         for message in st.session_state.chat_output:
-                            st.markdown(message)
+                            render_visual_output(message)
                             st.markdown("---")  # Add separator between outputs
 
                         # Output Actions
@@ -1724,7 +1769,7 @@ def main():
                         reversed(st.session_state.chat_output), 1
                     ):
                         with st.expander(f"Output #{i}", expanded=False):
-                            st.markdown(output)
+                            render_visual_output(output)
                 else:
                     st.info("Run some patterns to see output analysis.")
 
@@ -1963,6 +2008,132 @@ def main():
                             save_outputs()  # Save after clearing
                             st.success("All starred outputs cleared!")
                             st.experimental_rerun()
+
+        elif view == "💰 HR Compensation Demo":
+            st.header("💰 HR Compensation Visual Explainer")
+            st.markdown("""
+            Welcome to the HR Compensation Visual Explainer! This demo uses AI to create
+            visual explanations with powerful analogies for complex compensation concepts.
+
+            **What you can explore:**
+            - Equity structures (RSUs, Stock Options, etc.)
+            - Vesting schedules and cliffs
+            - Total compensation calculations
+            - Salary bands and negotiation
+            - And much more!
+            """)
+
+            # Quick examples
+            st.subheader("🚀 Quick Start Examples")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                if st.button("📈 Explain RSUs", use_container_width=True):
+                    st.session_state.hr_demo_input = "Explain RSUs (Restricted Stock Units) with a visual analogy"
+
+            with col2:
+                if st.button("⏱️ 4-Year Vesting", use_container_width=True):
+                    st.session_state.hr_demo_input = "Explain 4-year vesting with 1-year cliff using a visual timeline"
+
+            with col3:
+                if st.button("💰 Total Comp", use_container_width=True):
+                    st.session_state.hr_demo_input = "Compare total compensation packages: $150K salary + equity vs $180K salary only"
+
+            st.markdown("---")
+
+            # Custom input
+            st.subheader("💡 Or Ask Your Own Question")
+            custom_input = st.text_area(
+                "What compensation concept would you like explained?",
+                value=st.session_state.get("hr_demo_input", ""),
+                height=100,
+                placeholder="Example: How do stock options work? What's the difference between ISO and NSO?"
+            )
+
+            if custom_input:
+                st.session_state.hr_demo_input = custom_input
+
+            if st.button("🎨 Generate Visual Explanation", type="primary", use_container_width=True):
+                if not st.session_state.get("hr_demo_input"):
+                    st.warning("Please enter a compensation concept to explain.")
+                else:
+                    # Validate configuration
+                    current_provider = st.session_state.config.get("vendor")
+                    current_model = st.session_state.config.get("model")
+
+                    if not current_provider or not current_model:
+                        st.error("Please select a provider and model in the sidebar first.")
+                    else:
+                        with st.spinner("🎨 Creating visual explanation..."):
+                            try:
+                                # Run the HR compensation visual pattern
+                                cmd = ["fabric", "--pattern", "create_hr_compensation_visual"]
+
+                                result = run(
+                                    cmd,
+                                    input=st.session_state.hr_demo_input,
+                                    capture_output=True,
+                                    text=True,
+                                    check=True
+                                )
+
+                                output = result.stdout.strip()
+
+                                if output:
+                                    st.markdown("---")
+                                    st.markdown("## 📊 Your Visual Explanation")
+                                    render_visual_output(output)
+
+                                    # Save to history
+                                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    save_output_log(
+                                        "create_hr_compensation_visual",
+                                        st.session_state.hr_demo_input,
+                                        output,
+                                        timestamp
+                                    )
+
+                                    # Copy button
+                                    st.markdown("---")
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        if st.button("📋 Copy Explanation", use_container_width=True):
+                                            success, error = set_clipboard_content(output)
+                                            if success:
+                                                st.success("Copied to clipboard!")
+                                            else:
+                                                st.error(error)
+                                    with col2:
+                                        if st.button("⭐ Save", use_container_width=True):
+                                            # Find the index of the last output log
+                                            if st.session_state.output_logs:
+                                                last_index = len(st.session_state.output_logs) - 1
+                                                if star_output(last_index, f"HR: {st.session_state.hr_demo_input[:50]}..."):
+                                                    st.success("Saved to starred outputs!")
+                                else:
+                                    st.error("No output generated. Please try again.")
+
+                            except CalledProcessError as e:
+                                st.error(f"Error: {e.stderr}")
+                            except Exception as e:
+                                st.error(f"Unexpected error: {str(e)}")
+
+            # Show example scenarios
+            st.markdown("---")
+            st.subheader("📚 Example Scenarios")
+
+            with st.expander("💼 Common Compensation Questions"):
+                st.markdown("""
+                - **Equity**: "Explain the difference between RSUs and stock options"
+                - **Vesting**: "What does 4-year vesting with 1-year cliff mean?"
+                - **Valuation**: "How do I calculate the value of my equity grant?"
+                - **Negotiation**: "Should I negotiate salary or equity?"
+                - **Taxes**: "What are the tax implications of ISOs vs NSOs?"
+                - **Comparison**: "Compare $120K salary + 0.1% equity vs $150K salary only"
+                - **Timeline**: "Show me a vesting timeline for 10,000 RSUs over 4 years"
+                - **Exercise**: "What happens to my stock options when I leave?"
+                """)
 
     except Exception as e:
         logger.error("Unexpected error in main function", exc_info=True)
